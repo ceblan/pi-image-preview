@@ -1,1 +1,5 @@
-This directory defines the high-level concepts, business logic, and architecture of this project using markdown. It is managed by [lat.md](https://www.npmjs.com/package/lat.md) — a tool that anchors source code to these definitions. Install the `lat` command with `npm i -g lat.md` and run `lat --help`.
+# pi-image-preview
+
+pi-image-preview documents the extension concepts that control image preview rendering and message attachment behavior.
+
+- [[runtime]] — Runtime behavior for draft tracking, submit-time sync, and message attachment

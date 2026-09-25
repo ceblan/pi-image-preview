@@ -48,6 +48,7 @@ type CtxLike = {
 		): void;
 		getEditorText(): string;
 		setEditorText(text: string): void;
+		/** Show a transient status line (e.g. "✓ Prompt sent"). Provided by pi-core's ExtensionUIContext. */
 		theme: any;
 	};
 };
@@ -143,18 +144,11 @@ export function registerImagePreviewExtension(
 	}
 
 	/**
-	 * Scan editor text for image paths.
+	 * Track image paths from a text snapshot.
 	 * Track new ones, remove ones that are no longer in the text.
 	 * Async to avoid blocking the event loop with file I/O.
 	 */
-	async function scanEditorText(ctx: CtxLike): Promise<void> {
-		let text: string;
-		try {
-			text = ctx.ui.getEditorText();
-		} catch (err) {
-			debugLog("Failed to get editor text", err);
-			return;
-		}
+	async function syncTrackedImagesFromText(text: string, ctx: CtxLike): Promise<void> {
 		if (!text) {
 			if (tracked.size > 0) {
 				tracked = new Map();
@@ -220,6 +214,20 @@ export function registerImagePreviewExtension(
 		}
 	}
 
+	/**
+	 * Scan editor text for image paths.
+	 */
+	async function scanEditorText(ctx: CtxLike): Promise<void> {
+		let text: string;
+		try {
+			text = ctx.ui.getEditorText();
+		} catch (err) {
+			debugLog("Failed to get editor text", err);
+			return;
+		}
+		await syncTrackedImagesFromText(text, ctx);
+	}
+
 	function startPolling(): void {
 		stopPolling();
 		pollTimer = setInterval(() => {
@@ -282,14 +290,25 @@ export function registerImagePreviewExtension(
 	pi.on("input", async (event: InputEvent, ctx: CtxLike): Promise<InputResult> => {
 		latestCtx = ctx;
 
-		if (tracked.size === 0) {
-			return { action: "continue" };
-		}
-
 		const fullText = (event.text || "").trim();
 
 		// Don't transform commands or shell escapes
 		if (fullText.startsWith("/") || fullText.trimStart().startsWith("!")) {
+			return { action: "continue" };
+		}
+
+		// Submit may happen before the 250ms poller has seen a freshly pasted
+		// path. Only when the submitted text references a path the poller has
+		// not tracked yet do we pay for an async sync — otherwise return using
+		// the cached entries so pi transcribes the user message as fast as a
+		// normal text prompt (the await would gate message_start in pi-core).
+		const detected = extractImagePaths(fullText);
+		const hasUntracked = detected.some(({ raw }) => !tracked.has(raw));
+		if (hasUntracked) {
+			await syncTrackedImagesFromText(fullText, ctx);
+		}
+
+		if (tracked.size === 0) {
 			return { action: "continue" };
 		}
 

@@ -27,7 +27,8 @@ pi install npm:pi-image-preview
 2. For `Ctrl+V`, pi saves the clipboard to a temp file and inserts its path; drag-and-drop and typing insert the path directly
 3. The extension **detects the path** — including backslash-escaped or quoted paths that contain spaces — reads the file, and renders a thumbnail above the editor
 4. The thumbnail is resized and converted to PNG for a compact, reliably-rendered preview; the label below shows the filename
-5. On **submit**, the full-resolution image is attached to your message (the path text stays in the message)
+5. On **submit**, the extension re-scans the submitted text before attaching images, so a fast `Ctrl+V` followed by `Enter` still works even if the preview poller has not run yet
+6. The full-resolution image is attached to your message (the path text stays in the message)
 
 ## Prerequisites
 
