@@ -14,6 +14,8 @@ Image preview extension for [pi coding agent](https://github.com/badlogic/pi-mon
 - **Auto-cleanup** — delete the image path from editor text and the preview disappears
 - **No editor conflicts** — works alongside vim mode and other editor extensions (does not use `setEditorComponent`)
 - **Screenshot integration** — automatically inlines images from screenshot tool results
+- **Chat images inside tmux** — images in the transcript (`read` results, pasted images) render inline in tmux, as they do in kitty outside tmux
+- **Mixed clients** — when a non-kitty client (for example, a phone over SSH) views the same tmux session, images fall back to text so no kitty escape codes reach it
 
 ## Install
 
@@ -69,6 +71,8 @@ This allows kitty graphics escape sequences to pass through tmux to the terminal
 
 Non-PNG formats are converted to PNG for display, since the kitty graphics protocol transmits PNG. Maximum file size: **50 MB** (larger files are silently skipped).
 
+Images larger than **~5 MB** are automatically downscaled to fit the provider's per-image API limit before the message is submitted (the inline preview thumbnail is a separate, smaller image). The original file on disk is never modified.
+
 ## Limitations
 
 - **Kitty terminal only** — other terminals get text-only labels (no image rendering)
@@ -76,9 +80,10 @@ Non-PNG formats are converted to PNG for display, since the kitty graphics proto
 - **tmux requires `allow-passthrough all`** — without it, images won't render inside tmux (the extension still works, but shows text fallback)
 - **No image selection/navigation** — this is a simple preview, not a gallery browser
 - **Thumbnail size is fixed** — images are scaled to fit within 25 columns; not configurable yet
-- **Images are not preserved in chat history** — after submitting, the preview clears; the image is sent as an attachment to the model
+- **Attachment preview clears on submit** — the image is sent to the model and shown in the transcript instead (inside tmux, too)
 - **GIF animation** — only the first frame is displayed
 - **SSH sessions** — kitty graphics protocol does not work over SSH unless using `kitten ssh` (kitty's SSH kitten)
+- **Inline chat images depend on pi internals** — tested against pi-tui 1.5.2; a pi update can change the private fields the patch reads, in which case chat images fall back to pi's default behaviour
 - **Multiple tmux panes showing pi** — each pane renders independently; switching panes clears/restores images correctly via Unicode placeholders, but rapid switching may briefly show artifacts
 
 ## How tmux support works
@@ -92,6 +97,14 @@ This extension uses kitty's **Unicode placeholder protocol** instead:
 3. These are **regular text characters** that tmux manages per-pane
 4. Switching panes swaps the text buffer → placeholders disappear → image disappears
 5. Switching back → placeholders redrawn → image reappears
+
+### Which clients get images
+
+Inside tmux, the environment (`KITTY_WINDOW_ID`, `TERM_PROGRAM`) describes the terminal that started the tmux server, not the terminals viewing the pane now. The extension asks tmux once a second which clients are attached to the pane's session:
+
+- **Only kitty-protocol terminals** (kitty, Ghostty, WezTerm) — images render inline
+- **Any other terminal attached** — text fallback, and no kitty commands are sent
+- **Viewers change, or the window becomes visible** — pi redraws, and images are sent again to the terminals that missed them
 
 ## Development
 

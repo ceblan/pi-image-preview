@@ -12,8 +12,12 @@ const IMAGE_EXT = "(?:png|jpe?g|gif|webp)";
 const BARE_PATH = `(?:~/|\\.\\.?/|/)(?:\\\\.|[^\\s:*?"<>|])*\\.${IMAGE_EXT}(?=\\s|$)`;
 // A double-quoted path may contain spaces verbatim; terminals quote dragged
 // paths this way as an alternative to backslash-escaping.
-const DOUBLE_QUOTED_PATH = `"(?:\\\\.|[^"\\\\])*\\.${IMAGE_EXT}"`;
-const SINGLE_QUOTED_PATH = `'(?:\\\\.|[^'\\\\])*\\.${IMAGE_EXT}'`;
+// The closing quote must sit at a token boundary: it may be followed by
+// whitespace, end of text, or punctuation (e.g. a comma), but not by another
+// filename-ish character, so a trailing `"x.png"junk` does not match.
+const QUOTE_END = "(?![A-Za-z0-9._-])";
+const DOUBLE_QUOTED_PATH = `"(?:\\\\.|[^"\\\\])*\\.${IMAGE_EXT}"${QUOTE_END}`;
+const SINGLE_QUOTED_PATH = `'(?:\\\\.|[^'\\\\])*\\.${IMAGE_EXT}'${QUOTE_END}`;
 const IMAGE_PATH_RE = new RegExp(
 	`${DOUBLE_QUOTED_PATH}|${SINGLE_QUOTED_PATH}|${BARE_PATH}`,
 	"gi",

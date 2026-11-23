@@ -47,4 +47,13 @@ describe("image path detection", () => {
 			{ raw: "/b/c.jpeg", path: "/b/c.jpeg" },
 		]);
 	});
+
+	it("allows punctuation after a quoted path but rejects trailing filename chars", () => {
+		// A comma right after the closing quote is a valid token boundary.
+		expect(extractImagePaths('"/a/b.png",next')).toEqual([
+			{ raw: '"/a/b.png"', path: "/a/b.png" },
+		]);
+		// A filename-ish char glued to the closing quote is not a real path.
+		expect(extractImagePaths('"/a/b.png"junk')).toEqual([]);
+	});
 });
