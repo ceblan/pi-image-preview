@@ -14,8 +14,12 @@ type Handler = (...args: any[]) => any;
 
 function makeHarness(deps: any) {
 	const handlers = new Map<string, Handler>();
+	const renderers = new Map<string, Handler>();
 	const pi = {
 		on: (event: string, handler: Handler) => handlers.set(event, handler),
+		registerEntryRenderer: (type: string, renderer: Handler) =>
+			renderers.set(type, renderer),
+		appendEntry: vi.fn(),
 		sendUserMessage: vi.fn(),
 	};
 	const ctx = {
@@ -29,7 +33,7 @@ function makeHarness(deps: any) {
 		},
 	};
 	registerImagePreviewExtension(pi as any, deps);
-	return { handlers, ctx };
+	return { handlers, renderers, pi, ctx };
 }
 
 const png: ImageContent = {
@@ -230,6 +234,88 @@ describe("submit attachment resizing", () => {
 
 			expect(result.action).toBe("transform");
 			expect(result.images).toEqual([rawImage]);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+});
+
+describe("transcript thumbnails", () => {
+	const raw = { type: "image" as const, data: "RAW", mimeType: "image/png" };
+	const small = { type: "image" as const, data: "SMALL", mimeType: "image/png" };
+	const text = "look /tmp/shot.png";
+	const userMessage = (withImage = true) => ({
+		role: "user",
+		content: [{ type: "text", text }, ...(withImage ? [raw] : [])],
+	});
+	const previewed = {
+		readImageContentFromPathAsync: vi.fn(async () => raw),
+		loadImageContentFromPath: vi.fn(async () => null),
+		maybeResizeImage: vi.fn(async () => small),
+	};
+
+	it("keeps a previewed thumbnail in the transcript, above the user message", async () => {
+		vi.useFakeTimers();
+		try {
+			const { handlers, pi, ctx } = makeHarness(previewed);
+			ctx.ui.getEditorText = vi.fn(() => text);
+			await handlers.get("session_start")!(undefined, ctx);
+			await vi.advanceTimersByTimeAsync(300);
+
+			await handlers.get("input")!({ text, images: [] }, ctx);
+			expect(pi.appendEntry).not.toHaveBeenCalled();
+
+			handlers.get("message_start")!({ message: userMessage() }, ctx);
+			expect(pi.appendEntry).toHaveBeenCalledTimes(1);
+			expect(pi.appendEntry).toHaveBeenCalledWith("image-preview-attachment", {
+				images: [{ data: "SMALL", mimeType: "image/png", label: "shot.png" }],
+			});
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it("renders one gallery per entry however often pi rebuilds the chat", () => {
+		const { renderers } = makeHarness(previewed);
+		const render = renderers.get("image-preview-attachment")!;
+		const entry = {
+			data: { images: [{ data: "SMALL", mimeType: "image/png", label: "shot.png" }] },
+		};
+		const theme = { fg: (_color: string, s: string) => s, bold: (s: string) => s };
+
+		const gallery = render(entry, { expanded: false }, theme);
+
+		expect(render(entry, { expanded: true }, theme)).toBe(gallery);
+		expect(String(gallery.render(80))).toContain("shot.png");
+	});
+
+	it("adds nothing while no thumbnail has been previewed", async () => {
+		// Pasting and pressing Enter before the poller ran leaves the thumbnail
+		// still being built: the widget showed none, so the transcript gets none.
+		const { handlers, pi, ctx } = makeHarness({
+			...previewed,
+			maybeResizeImage: vi.fn(() => new Promise<ImageContent>(() => {})),
+		});
+
+		await handlers.get("input")!({ text, images: [] }, ctx);
+		handlers.get("message_start")!({ message: userMessage() }, ctx);
+
+		expect(pi.appendEntry).not.toHaveBeenCalled();
+	});
+
+	it("drops thumbnails of a submission that pi did not send with images", async () => {
+		vi.useFakeTimers();
+		try {
+			const { handlers, pi, ctx } = makeHarness(previewed);
+			ctx.ui.getEditorText = vi.fn(() => text);
+			await handlers.get("session_start")!(undefined, ctx);
+			await vi.advanceTimersByTimeAsync(300);
+			await handlers.get("input")!({ text, images: [] }, ctx);
+
+			handlers.get("message_start")!({ message: userMessage(false) }, ctx);
+			handlers.get("message_start")!({ message: userMessage() }, ctx);
+
+			expect(pi.appendEntry).not.toHaveBeenCalled();
 		} finally {
 			vi.useRealTimers();
 		}

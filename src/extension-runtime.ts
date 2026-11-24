@@ -1,7 +1,8 @@
 import path from "node:path";
 import type { ImageContent, ContentBlock } from "./content.ts";
-import { ImageGallery, type GalleryImage } from "./image-gallery.ts";
+import { ImageGallery, type GalleryImage, type GalleryTheme } from "./image-gallery.ts";
 import { extractImagePaths } from "./image-paths.ts";
+import { PREVIEW_MAX_BYTES } from "./preview-resize.ts";
 import { upgradeScreenshotToolResult } from "./tool-result-upgrader.ts";
 import { debugLog } from "./debug.ts";
 
@@ -35,11 +36,18 @@ type PiLike = {
 		content: string | ContentBlock[],
 		options?: { deliverAs?: "steer" | "followUp" },
 	): void;
+	registerEntryRenderer(
+		customType: string,
+		renderer: (entry: any, options: any, theme: any) => unknown,
+	): void;
+	appendEntry(customType: string, data?: unknown): void;
 };
 
 type CtxLike = {
 	cwd: string;
 	isIdle(): boolean;
+	/** False where pi shows no transcript (print and JSON modes). */
+	hasUI?: boolean;
 	ui: {
 		setWidget(
 			key: string,
@@ -68,6 +76,11 @@ type InputResult =
 	| { action: "handled" }
 	| { action: "transform"; text: string; images: ImageContent[] };
 
+/** Event shape for the "message_start" event from pi. */
+type MessageStartEvent = {
+	message: { role: string; content: string | ContentBlock[] };
+};
+
 /** Re-export for tool_result event typing. */
 type ToolResultEvent = import("./tool-result-upgrader.ts").ToolResultEventLike;
 
@@ -75,10 +88,21 @@ type ToolResultEvent = import("./tool-result-upgrader.ts").ToolResultEventLike;
 
 const WIDGET_KEY = "image-preview";
 const POLL_INTERVAL_MS = 250;
+/** Session entry that keeps submitted thumbnails in the transcript. */
+const ATTACHMENT_ENTRY = "image-preview-attachment";
 
 /** Produce a label from an image path — just the filename. */
 function trimImageLabel(filePath: string): string {
 	return path.basename(filePath);
+}
+
+function galleryTheme(theme: any): GalleryTheme {
+	return {
+		accent: (s: string) => theme.fg("accent", s),
+		muted: (s: string) => theme.fg("muted", s),
+		dim: (s: string) => theme.fg("dim", s),
+		bold: (s: string) => theme.bold(s),
+	};
 }
 
 // ── Extension ──────────────────────────────────────────────
@@ -91,6 +115,8 @@ export function registerImagePreviewExtension(
 	let gallery: ImageGallery | null = null;
 	let pollTimer: ReturnType<typeof setInterval> | null = null;
 	let latestCtx: CtxLike | null = null;
+	/** Thumbnails previewed for the last submission, until their user message starts. */
+	let submitted: GalleryImage[] = [];
 
 	// ── Helpers ────────────────────────────────────────────
 
@@ -122,14 +148,7 @@ export function registerImagePreviewExtension(
 		ctx.ui.setWidget(
 			WIDGET_KEY,
 			(_tui: any, theme: any) => {
-				const galleryTheme = {
-					accent: (s: string) => theme.fg("accent", s),
-					muted: (s: string) => theme.fg("muted", s),
-					dim: (s: string) => theme.fg("dim", s),
-					bold: (s: string) => theme.bold(s),
-				};
-
-				gallery = new ImageGallery(galleryTheme);
+				gallery = new ImageGallery(galleryTheme(theme));
 				gallery.setImages(galleryImages);
 				return gallery;
 			},
@@ -332,8 +351,18 @@ export function registerImagePreviewExtension(
 			return { action: "continue" };
 		}
 
+		// pi draws a user message from its text only; the thumbnails already
+		// previewed above the editor are kept as a session entry instead.
+		const thumbnails: GalleryImage[] = matched.flatMap(
+			({ label, previewImage }) =>
+				previewImage && previewImage.data.length <= PREVIEW_MAX_BYTES
+					? [{ data: previewImage.data, mimeType: previewImage.mimeType, label }]
+					: [],
+		);
+
 		// Clear state
 		resetDraft(ctx);
+		submitted = ctx.hasUI === false ? [] : thumbnails;
 
 		// Keep the original text as-is (paths stay visible in chat),
 		// just attach the actual image data alongside
@@ -342,5 +371,35 @@ export function registerImagePreviewExtension(
 			text: fullText,
 			images: [...(event.images ?? []), ...usedImages],
 		};
+	});
+
+	// The entry is appended when pi starts that user message, so it lands right
+	// above the message even for a queued submission.
+	// shortcut: pi places an entry appended mid-stream above the streaming
+	// reply, so a steering submission lands one block too high.
+	// SAFETY: the renderer runs for entries this extension wrote.
+	const galleries = new WeakMap<object, ImageGallery>();
+	pi.registerEntryRenderer(ATTACHMENT_ENTRY, (entry, _options, theme) => {
+		// pi rebuilds chat components on invalidate; one gallery per entry keeps
+		// its kitty image ids stable across rebuilds.
+		let entryGallery = galleries.get(entry);
+		if (!entryGallery) {
+			entryGallery = new ImageGallery(galleryTheme(theme));
+			entryGallery.setImages(entry.data?.images ?? []);
+			galleries.set(entry, entryGallery);
+		}
+		return entryGallery;
+	});
+	pi.on("message_start", (event: MessageStartEvent, ctx: CtxLike) => {
+		if (event.message.role !== "user") return;
+		const thumbnails = submitted;
+		submitted = [];
+		const sent = Array.isArray(event.message.content) &&
+			event.message.content.some((block) => block.type === "image");
+		// The message owns them; without images it never carried them (another
+		// extension replaced the input), so they are dropped either way.
+		if (thumbnails.length && sent && ctx.hasUI !== false) {
+			pi.appendEntry(ATTACHMENT_ENTRY, { images: thumbnails });
+		}
 	});
 }

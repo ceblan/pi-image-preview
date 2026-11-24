@@ -7,6 +7,7 @@ Image preview extension for [pi coding agent](https://github.com/badlogic/pi-mon
 ## Features
 
 - **Inline image preview** — paste (`Ctrl+V`), drag-and-drop a file, or type a path, and a thumbnail renders above the editor
+- **Thumbnail stays in the chat** — on submit the previewed thumbnail is kept above your message in the transcript and stored in the session, so it is still there after resume or restart
 - **Drag-and-drop & spaces in paths** — recognizes backslash-escaped and single/double-quoted paths, so filenames containing spaces work
 - **Any format, any size** — thumbnails are resized and converted to PNG (the format the kitty protocol transmits), so JPEG/WebP/GIF previews render and large images don't overflow the graphics transmission
 - **Horizontal layout** — multiple images display side by side
@@ -30,7 +31,7 @@ pi install npm:pi-image-preview
 3. The extension **detects the path** — including backslash-escaped or quoted paths that contain spaces — reads the file, and renders a thumbnail above the editor
 4. The thumbnail is resized and converted to PNG for a compact, reliably-rendered preview; the label below shows the filename
 5. On **submit**, the extension re-scans the submitted text before attaching images, so a fast `Ctrl+V` followed by `Enter` still works even if the preview poller has not run yet
-6. The full-resolution image is attached to your message (the path text stays in the message)
+6. The full-resolution image is attached to your message (the path text stays in the message), and the previewed thumbnail is kept above the message in the transcript
 
 ## Prerequisites
 
@@ -80,7 +81,7 @@ Images larger than **~5 MB** are automatically downscaled to fit the provider's 
 - **tmux requires `allow-passthrough all`** — without it, images won't render inside tmux (the extension still works, but shows text fallback)
 - **No image selection/navigation** — this is a simple preview, not a gallery browser
 - **Thumbnail size is fixed** — images are scaled to fit within 25 columns; not configurable yet
-- **Attachment preview clears on submit** — the image is sent to the model, but pi does not draw user attachments in the transcript; images pi does show there (`read` results) render inline inside tmux, too
+- **A thumbnail stays in the chat only if it was previewed** — paste and submit before the preview appears and the image is attached without a transcript thumbnail; pi does not draw user attachments itself, so the extension stores its thumbnail in the session (one small PNG per image)
 - **GIF animation** — only the first frame is displayed
 - **SSH sessions** — kitty graphics protocol does not work over SSH unless using `kitten ssh` (kitty's SSH kitten)
 - **Inline chat images depend on pi internals** — tested against pi-tui 1.5.2; a pi update can change the private fields the patch reads, in which case chat images fall back to pi's default behaviour

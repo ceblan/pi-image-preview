@@ -18,10 +18,18 @@ When the input event fires, the extension first rejects slash commands and shell
 
 Message attachment sends the full image to pi while leaving user-visible text intact.
 
-After submit-time sync, every tracked path still present in the submitted text contributes its image to the input transform result. The original text is preserved so the chat remains understandable and the draft preview state is cleared. pi draws only the text of a user message, so the attachment itself is not shown in the transcript (see [[inline-images#Scope]]). Immediate "prompt sent" feedback for image-bearing prompts is not this extension's job: it belongs to whichever extension blocks `before_agent_start` with slow work (e.g. image-vision's auto-analysis, which emits its own status line), because that is where the transcription delay actually comes from.
+After submit-time sync, every tracked path still present in the submitted text contributes its image to the input transform result. The original text is preserved so the chat remains understandable and the draft preview state is cleared. pi draws only the text of a user message, so the extension keeps its own thumbnail beside it (see [[runtime#Transcript Thumbnail]]). Immediate "prompt sent" feedback for image-bearing prompts is not this extension's job: it belongs to whichever extension blocks `before_agent_start` with slow work (e.g. image-vision's auto-analysis, which emits its own status line), because that is where the transcription delay actually comes from.
 
 ## Submission Downscale
 
 Submission downscale shrinks an attachment that exceeds the provider's per-image byte limit before the message is submitted.
 
 [[src/submission-resize.ts#resizeForSubmission]] leaves images under 4.5 MB of base64 untouched and otherwise asks pi's resizer for a smaller encoding, preserving the original format; on failure the image is submitted unchanged. Attachments are resized concurrently, in the order they were tracked.
+
+## Transcript Thumbnail
+
+The transcript thumbnail keeps the previewed image in the chat above the message it was attached to, because pi draws a user message from its text blocks only.
+
+On submit the thumbnails that were already previewed are held back; when pi starts that user message they are written as a session entry (`image-preview-attachment`, one small PNG per image, bounded by the preview size limit) through `pi.appendEntry`. Holding them until `message_start` keeps them above the message for queued submissions too. A submission that went out without a thumbnail, or that pi sent without images, leaves no entry.
+
+The entry renderer returns one gallery per entry, built with [[src/extension-runtime.ts#galleryTheme]], so pi rebuilding the chat does not re-upload the image under a new id.

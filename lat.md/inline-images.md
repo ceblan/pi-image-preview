@@ -8,7 +8,7 @@ pi-tui ≥0.67.6 answers `images: null` inside tmux and screen, because direct k
 
 Scope limits inline chat images to what pi draws itself; attachments submitted by this extension are not among them.
 
-pi renders a user message from its text blocks only, so an image attached through [[runtime#Message Attachment]] is sent to the model but never drawn in the transcript, in any terminal. Only tool-result images reach the patch below.
+pi renders a user message from its text blocks only, so an image attached through [[runtime#Message Attachment]] is sent to the model but never drawn by pi in the transcript. The extension keeps its own thumbnail beside the message instead (see [[runtime#Transcript Thumbnail]]); only tool-result images reach the patch below.
 
 ## Capability Override
 
