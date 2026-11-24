@@ -314,8 +314,12 @@ export function registerImagePreviewExtension(
 
 		const fullText = (event.text || "").trim();
 
-		// Don't transform commands or shell escapes
-		if (fullText.startsWith("/") || fullText.trimStart().startsWith("!")) {
+		// Leave commands and shell escapes alone. A pasted path on its own
+		// starts with "/" too, so the start of an image path tells them apart.
+		const startsImagePath = extractImagePaths(fullText).some(({ raw }) =>
+			fullText.startsWith(raw),
+		);
+		if ((fullText.startsWith("/") && !startsImagePath) || fullText.startsWith("!")) {
 			return { action: "continue" };
 		}
 

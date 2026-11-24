@@ -87,6 +87,27 @@ describe("extension input handling", () => {
 		expect(result).toEqual({ action: "continue" });
 	});
 
+	it("attaches a pasted path submitted on its own, which also starts with /", async () => {
+		// Ctrl+V then Enter leaves the prompt as just "/tmp/pi-clipboard-<uuid>.png"
+		const readImage = vi.fn(async () => png);
+		const { handlers, ctx } = makeHarness({
+			readImageContentFromPathAsync: readImage,
+			loadImageContentFromPath: readImage,
+		});
+
+		const result = await handlers.get("input")!(
+			{ text: "/tmp/pi-clipboard-race.png" },
+			ctx,
+		);
+
+		expect(readImage).toHaveBeenCalledWith("/tmp/pi-clipboard-race.png");
+		expect(result).toEqual({
+			action: "transform",
+			text: "/tmp/pi-clipboard-race.png",
+			images: [png],
+		});
+	});
+
 	it("resizes a just-submitted image path the poller has not tracked yet", async () => {
 		const resizedImage = { ...png, data: "U01BTEw=" };
 		const resizeForSubmission = vi.fn(async () => resizedImage);
