@@ -1,4 +1,4 @@
-import { getCapabilities, Image, setCapabilities } from "@earendil-works/pi-tui";
+import { getCapabilities, Image, setCapabilities, TuiAltScreen } from "@earendil-works/pi-tui";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
 	clientSupportsKitty,
@@ -203,5 +203,23 @@ describe("inline images in tmux", () => {
 			rows: 12,
 		});
 		expect(parsePlacementSize("[image/png 1x1]")).toBeNull();
+	});
+
+	it("redraws the fullscreen TUI, which never runs Container.render, when the viewers change", () => {
+		// pi-tui's fullscreen TUI renders through a layout root, so a fake on its
+		// prototype has to be caught from its per-frame doRender() instead.
+		const fullscreen = Object.assign(Object.create(TuiAltScreen.prototype), {
+			terminal: {},
+			requestRender: vi.fn(),
+			invalidate: vi.fn(),
+			stopped: true,
+		});
+		recordTmuxClients(probe(kittyLaptop));
+		fullscreen.doRender();
+
+		recordTmuxClients(probe(kittyLaptop, termuxPhone));
+
+		expect(fullscreen.invalidate).toHaveBeenCalledTimes(1);
+		expect(fullscreen.requestRender).toHaveBeenCalledWith(true);
 	});
 });

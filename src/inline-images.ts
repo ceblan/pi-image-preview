@@ -4,6 +4,7 @@ import {
 	Image,
 	setCapabilities,
 	type TerminalCapabilities,
+	TuiAltScreen,
 } from "@earendil-works/pi-tui";
 import {
 	detectImageProtocol,
@@ -151,30 +152,45 @@ function sendOnce(
 let tui: Redrawable | undefined;
 
 /**
- * Grabs the TUI instance on its next frame, then restores Container.render.
- * Returns a function that restores it early if no frame was drawn.
+ * Grabs the TUI instance on its next frame, then restores the hooks. Returns a
+ * function that restores them early if no frame was drawn.
  */
 function captureTui(): () => void {
 	if (tui) return () => {};
-	// SAFETY: Container declares render(width): string[]; this only widens `this`.
-	const proto = Container.prototype as unknown as { render: RenderFn };
-	const original = proto.render;
-	const capture = function (this: Renderable, width: number) {
-		// SAFETY: fields are checked below before the value is kept.
-		const candidate = this as unknown as Partial<Redrawable>;
-		if (
-			candidate.terminal &&
-			typeof candidate.requestRender === "function" &&
-			typeof candidate.invalidate === "function"
-		) {
-			tui = candidate as Redrawable;
-			proto.render = original;
-		}
-		return original.call(this, width);
-	};
-	proto.render = capture;
+	// The fullscreen TUI renders through a layout root, so Container.render never
+	// sees it; its doRender() runs once per frame with the TUI as `this` instead.
+	const hooks: [object, string][] = [
+		[Container.prototype, "render"],
+		[TuiAltScreen.prototype, "doRender"],
+	];
+	type Hook = (this: Renderable, ...args: never[]) => unknown;
+	const restores: (() => void)[] = [];
+	for (const [prototype, method] of hooks) {
+		// SAFETY: both classes declare the hooked method; this only widens `this`.
+		const proto = prototype as { [method: string]: Hook };
+		const original = proto[method];
+		// A pi-tui update can rename the hook; skip it rather than break its frames.
+		if (!original) continue;
+		const capture: Hook = function (this: Renderable, ...args) {
+			// SAFETY: fields are checked below before the value is kept.
+			const candidate = this as unknown as Partial<Redrawable>;
+			if (
+				candidate.terminal &&
+				typeof candidate.requestRender === "function" &&
+				typeof candidate.invalidate === "function"
+			) {
+				tui = candidate as Redrawable;
+				for (const restore of restores) restore();
+			}
+			return original.apply(this, args);
+		};
+		proto[method] = capture;
+		restores.push(() => {
+			if (proto[method] === capture) proto[method] = original;
+		});
+	}
 	return () => {
-		if (proto.render === capture) proto.render = original;
+		for (const restore of restores) restore();
 	};
 }
 
