@@ -14,7 +14,7 @@ Image preview extension for [pi coding agent](https://github.com/badlogic/pi-mon
 - **Auto-cleanup** — delete the image path from editor text and the preview disappears
 - **No editor conflicts** — works alongside vim mode and other editor extensions (does not use `setEditorComponent`)
 - **Screenshot integration** — automatically inlines images from screenshot tool results
-- **Chat images inside tmux** — images in the transcript (`read` results, pasted images) render inline in tmux, as they do in kitty outside tmux
+- **Chat images inside tmux** — images pi shows in the transcript (`read` results) render inline in tmux, as they do in kitty outside tmux
 - **Mixed clients** — when a non-kitty client (for example, a phone over SSH) views the same tmux session, images fall back to text so no kitty escape codes reach it
 
 ## Install
@@ -80,7 +80,7 @@ Images larger than **~5 MB** are automatically downscaled to fit the provider's 
 - **tmux requires `allow-passthrough all`** — without it, images won't render inside tmux (the extension still works, but shows text fallback)
 - **No image selection/navigation** — this is a simple preview, not a gallery browser
 - **Thumbnail size is fixed** — images are scaled to fit within 25 columns; not configurable yet
-- **Attachment preview clears on submit** — the image is sent to the model and shown in the transcript instead (inside tmux, too)
+- **Attachment preview clears on submit** — the image is sent to the model, but pi does not draw user attachments in the transcript; images pi does show there (`read` results) render inline inside tmux, too
 - **GIF animation** — only the first frame is displayed
 - **SSH sessions** — kitty graphics protocol does not work over SSH unless using `kitten ssh` (kitty's SSH kitten)
 - **Inline chat images depend on pi internals** — tested against pi-tui 1.5.2; a pi update can change the private fields the patch reads, in which case chat images fall back to pi's default behaviour

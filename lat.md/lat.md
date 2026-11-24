@@ -3,3 +3,4 @@
 pi-image-preview documents the extension concepts that control image preview rendering and message attachment behavior.
 
 - [[runtime]] — Runtime behavior for draft tracking, submit-time sync, and message attachment
+- [[inline-images]] — Rendering pi's transcript images inside tmux, viewer probing, and redraw

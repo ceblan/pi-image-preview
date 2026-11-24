@@ -18,4 +18,10 @@ When the input event fires, the extension first rejects slash commands and shell
 
 Message attachment sends the full image to pi while leaving user-visible text intact.
 
-After submit-time sync, every tracked path still present in the submitted text contributes its full-resolution image to the input transform result. The original text is preserved so the chat remains understandable and the draft preview state is cleared. Immediate "prompt sent" feedback for image-bearing prompts is not this extension's job: it belongs to whichever extension blocks `before_agent_start` with slow work (e.g. image-vision's auto-analysis, which emits its own status line), because that is where the transcription delay actually comes from.
+After submit-time sync, every tracked path still present in the submitted text contributes its image to the input transform result. The original text is preserved so the chat remains understandable and the draft preview state is cleared. pi draws only the text of a user message, so the attachment itself is not shown in the transcript (see [[inline-images#Scope]]). Immediate "prompt sent" feedback for image-bearing prompts is not this extension's job: it belongs to whichever extension blocks `before_agent_start` with slow work (e.g. image-vision's auto-analysis, which emits its own status line), because that is where the transcription delay actually comes from.
+
+## Submission Downscale
+
+Submission downscale shrinks an attachment that exceeds the provider's per-image byte limit before the message is submitted.
+
+[[src/submission-resize.ts#resizeForSubmission]] leaves images under 4.5 MB of base64 untouched and otherwise asks pi's resizer for a smaller encoding, preserving the original format; on failure the image is submitted unchanged. Attachments are resized concurrently, in the order they were tracked.
